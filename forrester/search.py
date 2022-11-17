@@ -109,8 +109,10 @@ def search_by_vector():
     """
     if request.method == 'POST':
         vector = request.json
-        if not (isinstance(vector,list) and all(isinstance(entry, float) for entry in vector)):
-            raise ValueError(f"vector payload must be a list of floats. Got {vector}")
+        if not all([isinstance(vector,list) ,
+                    len(vector) == 100 ,
+                    all(isinstance(entry, float) for entry in vector)]):
+            raise ValueError(f"vector payload must be a list of 100 floats. Got {vector}")
         id_ = vector_to_id(vector=vector,articles=articles)
         return  search_by_id_default(id_)
 
