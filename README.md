@@ -17,6 +17,7 @@ pip install -r requirements.txt
 ```
 ## Run the app
 ```
+cd forrester
 flask --app search run
 ```
 
