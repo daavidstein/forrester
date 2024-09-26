@@ -8,6 +8,20 @@ import logging
 from werkzeug.routing import IntegerConverter # noqa - needed to enforce integer types for ids
 from flask_restx import Api, Resource, fields
 
+
+def match_unknown_vector(new_vector):
+
+    vectors = np.array((articles["vector"].tolist()))
+    similarity = cosine_similarity(np.array([new_vector, ]), vectors)
+    top_indices = np.argpartition(similarity, -TOP_N)[-TOP_N:]
+    # these are the similarity values which correspond to the top indices
+    # now we want to sort all these and use them to sort our indices
+    top_values = np.take_along_axis(similarity, top_indices, 1)
+    sorted_indices = np.take_along_axis(top_indices, matrix.argsort(-top_values), axis=1)[0][:TOP_N]
+    top_matches = articles.reset_index().iloc[sorted_indices]
+    response = top_matches.reset_index().to_dict(orient='records')
+    return response
+
 def create_similarity_mapping(articles:pd.DataFrame, top_n: int, outpath: str="sorted_indices.npy") -> np.array:
     """TODO cache and run once per day
            database?
@@ -84,6 +98,10 @@ def test_create_similarity_mapping():
 
 @ns.route('/<int:id_>/<int:num_matches>')
 @ns.route('/<int:id_>/<int:num_matches>/',doc=False)
+@ns.doc(params={
+	'id_': {'in': 'query', 'description': 'id of the article to search by', 'default': 43978},
+'num_matches': {'in': 'query', 'description': 'number of matches to retrieve', 'default': 5}
+})
 class SearchById(Resource):
     def get(self, id_: int, num_matches:int):
         """
@@ -110,6 +128,7 @@ class SearchByIdDefault(SearchById):
 @ns.route('/')
 class SearchByVector(Resource):
     @api.doc(body=vector_model)
+    @ns.expect(vector_model,validate=True)
     def post(self):
         """
         Search articles by vector (Top 5 Matches)
@@ -124,20 +143,18 @@ class SearchByVector(Resource):
 
         """
         vector = request.json["vector"]
-        #FIXME restx provides a way to do validation
+        #we do some validation with restx's @ns.expect(), but this provides a more informative message
+        #in the case that the vector is the wrong length
         if not all([isinstance(vector,list) ,
                     len(vector) == 100 ,
                     all(isinstance(entry, float) for entry in vector)]):
-            raise ValueError(f"vector payload must be a list of 100 floats. Got {vector}")
-        id_ = vector_to_id(vector=vector,articles=articles)
-        return  search_by_id(id_,TOP_N)
+            raise ValueError(f"vector payload must be a list of 100 floats. Got {vector} with length {(len(vector))}")
+        try:
+            id_ = vector_to_id(vector=vector,articles=articles)
+            return search_by_id(id_, TOP_N)
+        except:
+            return match_unknown_vector(vector)
 
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-#search by id (default: top 5 results) - Social Computing Goes Mobile
-# curl http://127.0.0.1:5000/search/43978/
-
-#search by vector -  Government IT Spending In 2008
-# curl -d '{"vector":[0.1426, 0.1087, 0.0609, -0.0799, 0.2368, -0.0665, -0.0103, 0.023700000000000002, 0.054700000000000006, 0.0108, 0.0918, 0.14300000000000002, -0.0499, 0.1612, -0.111, -0.006500000000000001, 0.0791, -0.321, 0.11220000000000001, 0.19490000000000002, -0.1947, 0.1386, -0.08650000000000001, -0.16570000000000001, -0.0912, 0.0449, -0.1149, 0.33180000000000004, -0.15960000000000002, -0.1577, -0.0631, -0.1449, -0.06330000000000001, 0.16490000000000002, -0.1836, 0.1019, -0.044500000000000005, -0.2058, 0.1018, -0.0723, -0.1563, 0.1404, -0.0522, -0.0473, 0.0291, -0.10940000000000001, 0.010700000000000001, 0.0055000000000000005, 0.11080000000000001, -0.039, -0.0026000000000000003, 0.1086, 0.20400000000000001, -0.1131, 0.046700000000000005, -0.2621, -0.0183, -0.084, -0.0816, 0.035500000000000004, 0.047900000000000005, 0.0965, 0.0046, -0.09970000000000001, -0.1602, 0.23, 0.1, -0.0699, 0.3356, -0.0131, 0.0429, -0.32630000000000003, 0.09, -0.3865, 0.25780000000000003, -0.2233, 0.0658, -0.0507, 0.1694, 0.1794, -0.016900000000000002, 0.0548, 0.0507, 0.0453, -0.11570000000000001, 0.0489, 0.06670000000000001, 0.0228, 0.0018000000000000002, -0.0898, 0.0081, -0.1842, -0.0882, 0.3491, -0.1298, -0.125, 0.015700000000000002, -0.19, -0.0873, 0.0756]}' -H "Content-Type: application/json" -X POST http://127.0.0.1:5000/search

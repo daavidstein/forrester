@@ -1,5 +1,7 @@
 # Forrester Document Embedding Search
 
+This flask app is a demo of how to implement document search with embeddings and cosine similarity, as well as implement API endpoints with Flask and Fast API.
+For proprietary reasons, the data isn't shared here, and the app will unfortunately not run without "out of the box" without it.
 
 ## On macOS & Linux
 ```
